@@ -4,7 +4,7 @@
 # creates a base line and allows periodic comparisons and CSV reporting.
 
 #Nov 2012 - Simon Moffatt
-#http://www.github.com/smof/fingeprint
+#http://www.github.com/smof/fingerprint
 
 
 module Fingerprint
@@ -16,36 +16,57 @@ module Fingerprint
   require 'base64'
   require 'getoptlong'
   require 'rdoc'
+  require 'socket'
   
   class Main
     
     #Globals ###################################################################################################################################
     $date=Time.now.strftime("%d-%m-%Y_%H%M")
-    $init_file ="reports/init.rc" #Stores initialisation hashes.  
-    $master_file_list="reports/master_file_list" #contains list of files to be scanned.  Full path of the file to be scanned.  One file per line.
-    $baseline_report="reports/baseline_report.csv" #initial baseline report file
-    $scan_report="reports/scan_report_#{$date}.csv" #periodic report file
-    $diff_report = "reports/diff_report_#{$date}.csv" #diff report showing hash mismatches
+    $reports_dir = "reports/"
+    $log_file = "#{$reports_dir}fingerprint.log"
+    $write_to_logs = false #false to turn off logs
+    $init_file = "#{$reports_dir}.init.rc" #Stores initialisation hashes.  Hidden and encrypted  
+    $master_file_list = "#{$reports_dir}master_file_list" #contains list of files to be scanned.  Full path of the file to be scanned.  One file per line.
+    $baseline_report = "#{$reports_dir}baseline_report.csv" #initial baseline report file
+    $scan_report = "#{$reports_dir}scan_report_#{$date}.csv" #periodic report file
+    $diff_report = "#{$reports_dir}diff_report_#{$date}.csv" #diff report showing hash mismatches
     #encryption properties
     $cipher = OpenSSL::Cipher.new('aes-256-cbc')
-    $key = Base64.encode64("averylongkeythatwillshouldcomefromthecommandline")
+    $key = Base64.encode64("As33dkeywhich15quitelongbutnott00long#{Socket.gethostname}") #adds in local machine name to lock to same machine
     #Globals ###################################################################################################################################
+    
+    
+    #Log writer
+    def self.write_log log_message
+      
+      date=Time.now.strftime("%d-%m-%Y_%H:%M:%S") #more detailed date as $date can't contain :
+      
+      unless $write_to_logs == false
+        
+        File.open($log_file,"a") do |log|
+      
+          log.puts "#{date} Fingerprint.rb #{log_message}"
+         
+        end
+        
+      end
+      
+    end
+    
     
     
     def self.help
       
       puts "Usage: fingerprint [OPTION]"
       puts ""
-      puts "--help, -h          show help"
-      puts "--encrypt, -e       encrypt an existing report file"
-      puts "--decrypt, -d       decrypt an existing report file"
-      puts "--analyse, -a       perform a diff analysis between an existing baseline and periodic scan report"
+      puts "--help, -h          show this help message"
+      puts "--init, -i          creates a new baseline report, replaces all previous scanned reports, snapshots the master file list and baseline report"
       puts "--scan, -s          perform a current scan of files from the master file list"
-      puts "--init, -i          creates a new baseline report, replaces all previous baseline and scanned reports, snapshots the master file list"
+      puts "--diff, -d          perform a diff analysis between the current baseline and a selected periodic scan report"
       puts ""
       puts "Example: ruby fingerprint.rb --init"
       puts ""
-      puts "The reports/ directory will contain the published baseline, scan and diff reports."
+      puts "The #{$reports_dir} directory will contain the published baseline, scan and diff reports."
       puts "Populate the #{$master_file_list} with a list of files to scan.  One file path per line."
             
     end
@@ -53,79 +74,134 @@ module Fingerprint
     
     #initialises app, deletes previous reports, creates baseline and takes hashes for file_list and baseline report pumping into init store
     def self.init
-      
+                    
       #get a dir listing of the reports/ directory excluding the init file
-      existing_report_files = Dir.entries("reports")
-      existing_report_files.delete($master_file_list.split("/")[1])
-           
-     
+      existing_report_files = Dir.entries($reports_dir)
+      
+      if File.exists?($master_file_list)
+          
+          STDOUT.puts "Remove existing #{$master_file_list}? [y/n]"
+          remove_master_file_list_answer = gets.chomp.to_s.downcase
+          answers=["y","n"]
+          while !answers.include? remove_master_file_list_answer do
+              STDOUT.puts "Remove existing #{$master_file_list} [y/n]?"
+              remove_master_file_list_answer = gets.chomp.to_s.downcase  
+          end      
+      
+          #if you want to keep the existing master file list in place
+          if remove_master_file_list_answer.eql? "n" 
+            existing_report_files.delete($master_file_list.split("/")[1])
+                    
+          end
+      
+      end
+          
       #delete all files in reports/ directory      
       existing_report_files.each do |file| 
         unless File.directory?(file)
-           File.delete("reports/#{file}") 
+           File.delete("#{$reports_dir}#{file}") 
          end 
       end
       
+      write_log "--init started"
+      write_log "Existing report files deleted"
+            
       #only start the baseline report if the master_file_list has been populated     
       if File.size?($master_file_list).nil?
         
-        puts ""
-        puts "ERROR: #{$master_file_list} is empty.  Please populate with a list of files to monitor.  One file path per line"
-        puts "Eg."
-        puts "Cat #{$master_file_list}"
-        puts "/bin/dmesg"
-        puts "/bin/ntfsdump_logfile"
-        puts "/bin/init-checkconf"
-        puts "/bin/cat"
-        puts "..."
+        STDOUT.puts "#{$master_file_list} is empty or missing.  Please populate and rerun fingerprint.rb --init"
+        write_log "master_file_list not populated"
         
       else
        
           #create baseline report
           perform_scan "baseline"
-     
+                   
           #snapshot master file list and baseline report hashes
-          init_hashes =[]
-          init_hashes << "#{$master_file_list}, #{create_hash_for_file($master_file_list)}"
-          init_hashes << "#{$baseline_report}, #{create_hash_for_file($baseline_report)}"
+          init_hashes = Hash.new
+          init_hashes[$master_file_list] = create_hash_for_file($master_file_list)
+          init_hashes[$baseline_report] =  create_hash_for_file($baseline_report)     
        
-          #write out the init file
-          init_file = File.open($init_file,"w")
-          init_hashes.each do |line| init_file.puts line end #basic puts but driven to open file
-          init_file.close #closes
-          
-          #encrypt the init file
-          encrypt_file $init_file
-                
+          #write out the encrypted init file
+          $cipher.encrypt
+          $cipher.key = $key #need to concatentate the local user and machine name to this seed key to make it slightly more secure!
+                             
+          File.open($init_file, "w") do |file|
+           
+              file.write $cipher.update(init_hashes.to_s)
+              file.write $cipher.final
+              write_log ".init.rc created"
+                       
+          end
+                         
       end     
         
        
        
     end
 
-    #checks that the master_file_list has not been tampered with since the last init ran - checks hashes in init.rc with those of actual file
+    #checks that the master_file_list has not been tampered with since the last init ran - checks hashes in init.rc with current hash of actual file
     def self.check_master_file_list
       
-      decrypted_init =[]
-      #decrypt init.rc file and parse decrypted stream into an array
-      CSV.parse(decrypt_file "reports/init.enc") do |line|
+      write_log "--scan started.  #{$master_file_list} being checked for consistency"
+      #decrypt init.rc file and rip out the hash for the master_file_list.  This is dirty.  Basically a hash as a string being manually stripped. Replace.
+      recovered_master_file_list_hash = decrypt_init.split(",")[0].split("=>")[1].gsub("\"","")
+     
+      #compare the recovered hash from the init with a newly created hash for the master_file_list.  return true or recovered hash value
+      file_ok = recovered_master_file_list_hash == create_hash_for_file($master_file_list) ? true : recovered_master_file_list_hash
+      
+      if file_ok == true
         
-        decrypted_init << line
+        write_log "#{$master_file_list} found to be consistent"
+        
+      else
+        
+        write_log "Inconsistencies found with #{$master_file_list}"
+        write_log "Stored Hash: #{file_ok}"
+        write_log "Current Hash: #{create_hash_for_file($master_file_list)}"
+        write_log "Run Fingerprint.rb --init to reset"
         
       end
       
-      puts array_of_decrypted_file[1]
+      return file_ok
       
     end
 
+    #checks that the baseline_report file has not been tampered with since the last init ran - checks hashes in init.rc with current hash of actual file
+    def self.check_baseline_report
+      
+      write_log "-diff started.  #{$baseline_report} being checked for consistency"
+      
+      #decrypt init.rc file and rip out the hash for the baseline_report file.  Needs replacing with something more robust
+      recovered_baseline_report_hash = decrypt_init.split(",")[1].split("=>")[1].gsub("\"","").gsub("}","")
+     
+      #compare the recovered hash from .init.rc with a newly created hash for the master_file_list.  return true or recovered hash value
+      file_ok = recovered_baseline_report_hash == create_hash_for_file($baseline_report) ? true : recovered_baseline_report_hash
+      
+      if file_ok == true
+        
+        write_log "#{$baseline_report} found to be consistent"
+        
+      else
+        
+        write_log "Inconsistencies found with #{$baseline_report}"
+        write_log "Stored Hash: #{file_ok}"
+        write_log "Current Hash: #{create_hash_for_file($baseline_report)}"
+        write_log "Run Fingerprint.rb --init to reset"
+        
+      end
+      
+      return file_ok
+      
+    end
 
 
     #Create baseline hash report file
     def self.perform_scan(type="periodic")
     
-    check_master_file_list
-    
-            
+    #check that the master file list hasn't been tampered with before going ahead and creating a new scan file.  don't bother with check if runnig baseline
+    if (type == "baseline") || (check_master_file_list == true)
+              
         if type == "periodic"
              
           report_file = $scan_report
@@ -136,7 +212,6 @@ module Fingerprint
           
         end
 
-=begin        
        #write out report 
         CSV.open(report_file, 'wb') do |record|
           
@@ -159,16 +234,26 @@ module Fingerprint
               end      
                       
            else
-          
-             puts "CREATE_REPORT: Can't find master file list!"      
-  
-           end
+       
+             end
         
         end #ends CSV.open
+          
+         STDERR.puts "#{report_file} created"
+         write_log "#{report_file} created"     
+               
+                
+       
+    else    #if check_master_file_list returns false
       
-      
-=end        
+      STDERR.puts "Can't perform scan!!!  Inconsistencies found with #{$master_file_list}.  See #{$log_file}"
+            
+    end #ends check_master_file_list if
+  
+
     end
+
+
 
     #creates MD5 hash of file
     def self.create_hash_for_file filepath
@@ -185,60 +270,30 @@ module Fingerprint
     end
 
 
-    #encrypts file argument
-    def self.encrypt_file file
-      $cipher.encrypt
-      $cipher.key = $key
-       
       
-      if File.exists? file           
-        #create an encrypted output file with a .enc extension.  Uses existing file, splits and changes extention
-        encrypted_output_file = "#{File.dirname(file)}/#{File.basename(file).split(".")[0]}.enc"
-      
-        buf="" #empty buffer
-        File.open(encrypted_output_file, "wb") do |outf|
-          File.open(file, "rb") do |inf|
-                while inf.read(4096, buf)
-                    outf << $cipher.update(buf)
-                end
-               outf << $cipher.final
-          end
-       end
-      
-       File.delete file
-     
-      else
-       puts "ENCRYPTION:  Can't find #{file}"
-       
-      end
-      
-      
-    end
-    
-    #decrypts file argument into a byte steam that doesnt get written back to a file obj
-    def self.decrypt_file file
+    #decrypts the .init.rc file and returns a string
+    def self.decrypt_init
       
       $cipher.decrypt
       $cipher.key = $key
-      
-            
-      if File.exists? file      
-        #create an new decrypted output file, changing the input file extension to .dec
-        #decrypted_output_file = "#{File.dirname(file)}/#{File.basename(file).split(".")[0]}.dec"
-      
-       buf = "" #empty buffer
-       #File.open(decrypted_output_file, "wb") do |outf|
-       outf = "" # output file stream 
-        File.open(file, "rb") do |inf|
-            while inf.read(4096, buf)
+        
+      #check the init file exists            
+      if File.exists? $init_file      
+              
+        buf = "" #empty buffer
+        outf = "" # output file stream 
+       
+        File.open($init_file, "rb") do |file|
+            while file.read(4096, buf)
              outf << $cipher.update(buf)
             end
           outf << $cipher.final
         end
-      #end
 
-     else
-       puts "DECRYPTION: Can't find #{file}" 
+      else
+       
+       return
+       
       end
       
       #return stream of decrypted file in form of string
@@ -250,32 +305,33 @@ module Fingerprint
     #Compares baseline report and periodic report for any differences
     def self.perform_diff
       
-      #before performing diff, check that the baseline and master file list haven't been tampered with
-      decrypt_file $init_file
+      #Need to do a check of the baseline report integrity before continuing
+      if check_baseline_report == true
+
+        #produce a list of available periodic report files to use for comparison
+        scan_report_files = Dir.entries("reports/") #dir *
+        scan_report_files.keep_if {|file| file.include? "scan"} #pull out only the periodic_report files
       
-      
-      
-      
-      
-      
-      
-      
-      #produce a list of available periodic report files to use for comparison
-      scan_report_files = Dir.entries("reports/") #dir *
-      scan_report_files.keep_if {|file| file.include? "scan"} #pull out only the periodic_report files
-      
-      puts ""
-      puts "The following scan report files where found:"
-      puts "================================================"
-      scan_report_files.each_index do |index| puts "[#{index}] #{scan_report_files[index]}" end
-      puts ""
-      puts "Select number of file to use for comparison:"
-      selected_scan_file = scan_report_files[gets.chomp.to_i]  
-      
-      #perform comparison against the baseline report outputting to a diff_report
-      CSV.open($diff_report, 'wb') do |record|
+        puts ""
+        puts "The following scan report files where found:"
+        puts "================================================"
+        scan_report_files.each_index do |index| puts "[#{index}] #{scan_report_files[index]}" end
+        puts ""
+        puts "Select number of file to use for comparison:"
+        selected_value = gets.chomp.to_i
+        #check number selected is actually in the reports index       
         
-        record << ["File", "Baseline_Hash", "Scanned_Hash", "Baseline_Date_Last_Modified", "Scanned_Date_Last_Modified", "Baseline_Size", "Scanned_Size"]
+        while !scan_report_files.each_index.include?(selected_value) do
+            puts "Select number of file to use for comparison:"
+            selected_value=gets.chomp.to_i
+        end
+           
+        selected_scan_file = scan_report_files[selected_value]
+                      
+        #perform comparison against the baseline report outputting to a diff_report
+        CSV.open($diff_report, 'wb') do |record|
+        
+          record << ["File", "Baseline_Hash", "Scanned_Hash", "Baseline_Date_Last_Modified", "Scanned_Date_Last_Modified", "Baseline_Size", "Scanned_Size"]
         
            CSV.foreach($baseline_report,{:headers=>:first_row}) do |baseline_entry|
        
@@ -292,8 +348,16 @@ module Fingerprint
            
            end #ends CSV.foreach
          
-      end  #ends CSV.open     
+        end  #ends CSV.open     
+      
+        STDOUT.puts "Diff reported created.  See #{$diff_report} for more details."
+        write_log "#{$diff_report} created"
+              
+     else #check_baseline_report is false
+            
+      STDERR.puts "Can't perform diff!!!  Inconsistencies found with #{$baseline_report}.  See #{$log_file}"
        
+     end #ends check_baseline_report if
                     
     end
 
