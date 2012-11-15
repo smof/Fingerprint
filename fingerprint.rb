@@ -24,7 +24,7 @@ module Fingerprint
     $date=Time.now.strftime("%d-%m-%Y_%H%M")
     $reports_dir = "reports/"
     $log_file = "#{$reports_dir}fingerprint.log"
-    $write_to_logs = false #false to turn off logs
+    $write_to_logs = true #false to turn off logs
     $init_file = "#{$reports_dir}.init.rc" #Stores initialisation hashes.  Hidden and encrypted  
     $master_file_list = "#{$reports_dir}master_file_list" #contains list of files to be scanned.  Full path of the file to be scanned.  One file per line.
     $baseline_report = "#{$reports_dir}baseline_report.csv" #initial baseline report file
@@ -219,12 +219,16 @@ module Fingerprint
           
            if File.exist?($master_file_list) #check master list actually exists...
          
+              STDERR.puts "Files Processed:"
+              processed_files="."
               CSV.foreach($master_file_list,'r') do |file| #read in each file from master file list...
          
                   if File.file?(file[0]) #perform hash entry on file only if file in the master file list actually exists
           
                      record << [file[0], create_hash_for_file(file[0]), File.mtime(file[0]), File.size(file[0])]
-                                          
+                     
+                        STDERR.print processed_files   
+                                                                
                   else
                             
                       record << [file[0], "File not found or a directory", "File not found or a directory", "File not found or a directory"]
@@ -332,7 +336,10 @@ module Fingerprint
         CSV.open($diff_report, 'wb') do |record|
         
           record << ["File", "Baseline_Hash", "Scanned_Hash", "Baseline_Date_Last_Modified", "Scanned_Date_Last_Modified", "Baseline_Size", "Scanned_Size"]
-        
+                
+           STDERR.puts "Differences Identified:"
+           differences = "."
+           
            CSV.foreach($baseline_report,{:headers=>:first_row}) do |baseline_entry|
        
              CSV.foreach("reports/#{selected_scan_file}",{:headers=>:first_row}) do |scan_entry|
@@ -341,7 +348,9 @@ module Fingerprint
                if (baseline_entry[0] == scan_entry[0]) && (baseline_entry[1] != scan_entry[1])
              
                    record << [baseline_entry[0],baseline_entry[1],scan_entry[1],baseline_entry[2],scan_entry[2],baseline_entry[3],scan_entry[3]]
-                  
+                   STDOUT.print differences
+                                      
+                 
                end #ends if
                 
              end #ends CSV.foreach
@@ -376,7 +385,7 @@ module Fingerprint
     end
 
     #Processes command line arguments
-    opts.each do |opt,arg|
+    opts.each do |opt|
 
       case opt
 
