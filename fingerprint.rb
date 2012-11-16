@@ -371,50 +371,55 @@ module Fingerprint
     end
 
     #set options
-    opts = GetoptLong.new(
-      [ '--help', '-h', GetoptLong::NO_ARGUMENT ],
-      [ '--init', '-i', GetoptLong::NO_ARGUMENT ],
-       [ '--scan', '-s', GetoptLong::NO_ARGUMENT ],
-       [ '--diff', '-d', GetoptLong::NO_ARGUMENT ]
-    )
+     opts = GetoptLong.new(
+          [ '--help', '-h', GetoptLong::NO_ARGUMENT ],
+          [ '--init', '-i', GetoptLong::NO_ARGUMENT ],
+         [ '--scan', '-s', GetoptLong::NO_ARGUMENT ],
+         [ '--diff', '-d', GetoptLong::NO_ARGUMENT ]
+     )
+    
 
     #flash an error message unless 
-    unless ARGV[0]
-      puts "Option missing - (try --help)\n"
+    unless ARGV.length == 1
+      puts "Incorrect number of options - (try --help)\n"
       exit
     end
 
     #Processes command line arguments
-    opts.each do |opt|
+    begin
+      opts.each do |opt|
 
-      case opt
+       case opt
 
-      when '--help'
+          when '--help'
 
-            help
+             help
 
-      when '--scan'
+          when '--scan'
         
-        perform_scan
+            perform_scan
         
-      when '--diff'
+          when '--diff'
         
-        perform_diff
+            perform_diff
         
-      when '--init'
+          when '--init'
           
-          init
+             init
           
-      else
-        
-          help
-          
-      end
-
-    end
-
+          else
+             help
+             
+        end #end case
+      
+      end #end opts
     
+    rescue GetoptLong::InvalidOption => detail #catch any invalid options that are put down
+      
+       exit(1)
     
-  end
+    end #end begins
+    
+  end #end class
 
-end
+end #end module
