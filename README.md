@@ -17,6 +17,8 @@ any scan reports that have been created.  Any hash differences are sent to a dif
 Features
 --------
 
+INIT --> SCAN --> DIFF
+
 ./Fingerprint.rb --init				Performs initialisation.  Checks master file list, creates base line report, populates .init.rc 						file, deletes old reports.
 ./Fingerprint.rb --scan				Checks master file list, then performs a periodic scan.  Creates a scan CSV report file.
 ./Fingerprint.rb --diff				Performs a diff between the current baseline report and any selected periodic report.  Creates a 							diff CSV report file.
