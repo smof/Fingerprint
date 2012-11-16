@@ -1,4 +1,4 @@
-Fingerprint 1.0
+Fingerprint 0.1
 
 A file finger printing and basic integrity monitoring application.
 
@@ -17,15 +17,16 @@ any scan reports that have been created.  Any hash differences are sent to a dif
 Features
 --------
 
-./Fingerprint.rb --init				Performs initialisation.  Checks master file list, creates base line report, populates .init.rc file, deletes old reports.
+./Fingerprint.rb --init				Performs initialisation.  Checks master file list, creates base line report, populates .init.rc 						file, deletes old reports.
 ./Fingerprint.rb --scan				Checks master file list, then performs a periodic scan.  Creates a scan CSV report file.
-./Fingerprint.rb --diff				Performs a diff between the current baseline report and any selected periodic report.  Creates a diff CSV report file.
+./Fingerprint.rb --diff				Performs a diff between the current baseline report and any selected periodic report.  Creates a 							diff CSV report file.
 ./Fingerprint.rb --help				Additional help
 
 The default reports directory is reports/.
+
 This should contain a master_file_list which will contain the paths of the files to be monitored.  One path per line.
-After ./Fingerprint.rb --init is run, a file named .init.rc is created, which is a hidden, encrypted file, containing the baseline and master file list
- hash values.  This is used during --scan and -diff options to make sure no tampering has taken place on the actual reporting itself.
+
+After ./Fingerprint.rb --init is run, a file named .init.rc is created, which is a hidden, encrypted file, containing the baseline and master file list hash values.  This is used during --scan and -diff options to make sure no tampering has taken place on the actual reporting itself.
 
 License
 -------
