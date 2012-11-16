@@ -32,6 +32,11 @@ This should contain a master_file_list which will contain the paths of the files
 
 After ./Fingerprint.rb --init is run, a file named .init.rc is created, which is a hidden, encrypted file, containing the baseline and master file list hash values.  This is used during --scan and -diff options to make sure no tampering has taken place on the actual reporting itself.
 
+
+File and report locations all configurable as globals.
+
+Log location and verbosity configurable.
+
 License
 -------
 Licensed under the GNU General Public License v3 - See LICENSE file for further details.
