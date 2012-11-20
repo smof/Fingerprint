@@ -14,6 +14,8 @@ list is checked before the scan takes place, to make sure no tampering has taken
 After at least one periodic scan report has been completed, Fingerprint, can then be used with the -diff option which will compare the baseline to 
 any scan reports that have been created.  Any hash differences are sent to a diff report which can be used for analysis.
 
+Inspired by the Unix tool md5hash - http://en.wikipedia.org/wiki/Md5sum
+
 Features
 --------
 
